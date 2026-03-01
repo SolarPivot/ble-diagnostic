@@ -1003,7 +1003,7 @@
       <div class="device-item ${d.selected ? 'selected' : ''}">
         <div class="device-info">
           <div class="device-name">${d.name || 'Unknown Device'}</div>
-          <div class="device-address">${d.id}</div>
+          <div class="device-address" id="deviceListSerial_${d.id}">S/N: retrieving...</div>
         </div>
       </div>
     `).join('');
@@ -1129,6 +1129,11 @@
       autoVal === 0 ? '0 (∞)' : `${autoVal} min`;
 
     document.getElementById('deviceInfoPanel').classList.add('visible');
+    // Update the serial shown under device name in the scan list
+    if (bleDevice) {
+      const serialEl = document.getElementById(`deviceListSerial_${bleDevice.id}`);
+      if (serialEl) serialEl.textContent = `S/N: ${serial}`;
+    }
     log(`Device info populated: ${name} | S/N ${serial} | SW ${sw} | HW ${hw} | AutoStart ${autoVal === 0 ? '∞' : autoVal + ' min'}`, 'info');
   }
 
@@ -1146,6 +1151,9 @@
     ['infoName','infoSerial','infoAutoStart','infoSW','infoHW'].forEach(id => {
       document.getElementById(id).textContent = '—';
     });
+    // Reset serial under device name
+    const serialEls = document.querySelectorAll('[id^="deviceListSerial_"]');
+    serialEls.forEach(el => el.textContent = 'S/N: —');
 
     dropCount++;
     document.getElementById('btnSend').disabled = true;
