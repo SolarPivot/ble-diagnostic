@@ -531,30 +531,6 @@
     margin: 14px 0;
   }
 
-  /* Connected device info */
-  .connected-device {
-    background: rgba(0, 255, 157, 0.05);
-    border: 1px solid rgba(0, 255, 157, 0.2);
-    border-radius: 8px;
-    padding: 12px 14px;
-    margin-bottom: 14px;
-    display: none;
-  }
-
-  .connected-device.visible { display: block; }
-
-  .connected-device-name {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--accent2);
-    margin-bottom: 4px;
-  }
-
-  .connected-device-addr {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 11px;
-    color: var(--text-dim);
-  }
 
   @media (max-width: 400px) {
     .stats-row { grid-template-columns: repeat(2, 1fr); }
@@ -606,11 +582,6 @@
       <div class="scan-controls" style="margin-bottom:14px">
         <button class="btn btn-primary" id="btnScan" onclick="startScan()">⬡ Scan</button>
         <button class="btn btn-danger btn-sm" id="btnDisconnect" onclick="disconnect()" disabled>Disconnect</button>
-      </div>
-
-      <div class="connected-device" id="connectedDevice">
-        <div class="connected-device-name" id="connectedName">—</div>
-        <div class="connected-device-addr" id="connectedAddr">—</div>
       </div>
 
       <div class="device-list" id="deviceList">
@@ -826,25 +797,15 @@
 
       const options = {
         acceptAllDevices: true,
-        optionalServices: [SERVICE_UUID, CHAR_OUTPUT_UUID]
+        optionalServices: [SERVICE_UUID]
       };
 
       const device = await navigator.bluetooth.requestDevice(options);
 
-      devices[device.id] = {
-        id: device.id,
-        name: device.name || 'Unknown',
-        rssi: 0,
-        device: device,
-        selected: true
-      };
-
-      renderDeviceList();
-      log(`Found: ${device.name || 'Unknown'} [${device.id}]`, 'success');
-      setStatus(`Device selected: ${device.name || 'Unknown'}`, '');
+      log(`Found: ${device.name || 'Unknown'} — connecting...`, 'info');
       document.getElementById('scanSpinner').classList.remove('active');
 
-      // Auto connect
+      // Connect immediately — device added to list only after successful connection
       await connectToDevice(device);
 
     } catch (err) {
@@ -875,20 +836,33 @@
       log('Write characteristic found ✓', 'success');
 
       // Subscribe to output characteristic for incoming data from ESP32
+      // Must discover all characteristics then find by UUID to avoid GATT errors
       try {
-        bleOutputCharacteristic = await service.getCharacteristic(CHAR_OUTPUT_UUID);
-        await bleOutputCharacteristic.startNotifications();
-        bleOutputCharacteristic.addEventListener('characteristicvaluechanged', onDataReceived);
-        log('Output notifications subscribed ✓ — ESP32 replies will be logged', 'success');
+        const allChars = await service.getCharacteristics();
+        bleOutputCharacteristic = allChars.find(c => c.uuid === CHAR_OUTPUT_UUID) || null;
+        if (bleOutputCharacteristic) {
+          await bleOutputCharacteristic.startNotifications();
+          bleOutputCharacteristic.addEventListener('characteristicvaluechanged', onDataReceived);
+          log('Output notifications subscribed ✓ — ESP32 replies will be logged', 'success');
+        } else {
+          log('Output characteristic not found in service', 'warn');
+        }
       } catch (notifyErr) {
         log(`Output subscribe failed: ${notifyErr.message}`, 'warn');
       }
 
+      // Add to device list now that we're confirmed connected
+      devices[device.id] = {
+        id: device.id,
+        name: device.name || 'Unknown',
+        rssi: 0,
+        device: device,
+        selected: true
+      };
+      renderDeviceList();
+
       // Connected!
       setStatus(`Connected: ${device.name || 'Unknown'}`, 'connected');
-      document.getElementById('connectedDevice').classList.add('visible');
-      document.getElementById('connectedName').textContent = device.name || 'Unknown Device';
-      document.getElementById('connectedAddr').textContent = device.id;
       document.getElementById('btnSend').disabled = false;
       document.getElementById('btnDisconnect').disabled = false;
       document.getElementById('connStats').classList.add('visible');
@@ -927,7 +901,6 @@
     dropCount++;
     document.getElementById('btnSend').disabled = true;
     document.getElementById('connStats').classList.remove('visible');
-    document.getElementById('connectedDevice').classList.remove('visible');
     stopRSSIMonitor();
 
     bleCharacteristic = null;
@@ -942,15 +915,6 @@
     if (!device || !device.gatt) return;
     log('Auto-reconnect attempt...', 'warn');
     try {
-      // Re-add to device list for reconnect
-      devices[device.id] = {
-        id: device.id,
-        name: device.name || 'Unknown',
-        rssi: 0,
-        device: device,
-        selected: true
-      };
-      renderDeviceList();
       await connectToDevice(device);
     } catch (err) {
       log(`Reconnect failed: ${err.message}`, 'error');
@@ -1012,7 +976,6 @@
     setStatus('Disconnected', 'disconnected');
     document.getElementById('btnSend').disabled = true;
     document.getElementById('btnDisconnect').disabled = true;
-    document.getElementById('connectedDevice').classList.remove('visible');
     document.getElementById('connStats').classList.remove('visible');
     dropCount = 0;
   }
