@@ -544,6 +544,100 @@
   @media (max-width: 400px) {
     .stats-row { grid-template-columns: repeat(2, 1fr); }
   }
+
+  /* Help button and popup */
+  .help-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 1px solid var(--text-dim);
+    color: var(--text-dim);
+    font-size: 11px;
+    font-family: 'Share Tech Mono', monospace;
+    cursor: pointer;
+    margin-left: 8px;
+    flex-shrink: 0;
+    transition: all 0.2s;
+    vertical-align: middle;
+    line-height: 1;
+    background: transparent;
+    position: relative;
+    top: -1px;
+  }
+
+  .help-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .help-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.6);
+    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .help-overlay.visible { display: flex; }
+
+  .help-card {
+    background: var(--surface);
+    border: 1px solid var(--accent);
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 380px;
+    width: 100%;
+    box-shadow: 0 0 40px rgba(0,212,255,0.2);
+    position: relative;
+  }
+
+  .help-card-title {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 12px;
+  }
+
+  .help-card-body {
+    font-size: 14px;
+    color: var(--text);
+    line-height: 1.7;
+  }
+
+  .help-card-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    font-size: 20px;
+    color: var(--text-dim);
+    cursor: pointer;
+    line-height: 1;
+    background: none;
+    border: none;
+    padding: 0;
+  }
+
+  .help-card-close:hover { color: var(--text); }
+
+  /* Wrong device warning */
+  .wrong-device-warn {
+    background: rgba(255, 59, 92, 0.08);
+    border: 1px solid var(--danger);
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-family: 'Share Tech Mono', monospace;
+    color: var(--danger);
+    margin-bottom: 12px;
+    display: none;
+  }
+
+  .wrong-device-warn.visible { display: block; }
 </style>
 </head>
 <body>
@@ -556,9 +650,9 @@
         <path d="M12 2L12 22M12 2L17 7L12 12L17 17L12 22M12 2L7 7L12 12L7 17" stroke="#00d4ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
         <circle cx="12" cy="12" r="10" stroke="#1e3a5f" stroke-width="1"/>
       </svg>
-      <h1>BLE DIAGNOSTIC</h1>
+      <h1>BLE DIAGNOSTIC <button class="help-btn" onclick="showHelp('main')" style="border-color:#1e3a5f;top:0">?</button></h1>
     </div>
-    <div class="subtitle">SolarPivotPower BLE DEBUG TOOL &nbsp;·&nbsp; v0.6</div>
+    <div class="subtitle">SolarPivotPower BLE DEBUG TOOL &nbsp;·&nbsp; v0.7</div>
   </div>
 
   <div id="notSupported" class="not-supported" style="display:none">
@@ -585,7 +679,7 @@
     <!-- Scan Card -->
     <div class="card">
       <div class="card-header">
-        <div class="card-title"><span>01</span>Scan &amp; Connect</div>
+        <div class="card-title"><span>01</span>Scan &amp; Connect<button class="help-btn" onclick="showHelp('scan')">?</button></div>
         <div class="scan-spinner" id="scanSpinner"></div>
       </div>
 
@@ -594,6 +688,9 @@
         <button class="btn btn-danger btn-sm" id="btnDisconnect" onclick="disconnect()" disabled>Disconnect</button>
       </div>
 
+      <div class="wrong-device-warn" id="wrongDeviceWarn">
+        ⚠ This device may not be a pSolBot — verify before sending commands
+      </div>
       <div class="device-list" id="deviceList">
         <div class="empty-state">
           <div class="icon">📡</div>
@@ -605,7 +702,7 @@
     <!-- Send Card -->
     <div class="card">
       <div class="card-header">
-        <div class="card-title"><span>02</span>Send Command</div>
+        <div class="card-title"><span>02</span>Send Command<button class="help-btn" onclick="showHelp('send')">?</button></div>
       </div>
 
       <!-- Quick commands -->
@@ -636,7 +733,7 @@
     <!-- Log Card -->
     <div class="card">
       <div class="card-header">
-        <div class="card-title"><span>03</span>Event Log</div>
+        <div class="card-title"><span>03</span>Event Log<button class="help-btn" onclick="showHelp('log')">?</button></div>
         <div style="display:flex;gap:8px">
           <button class="btn btn-sm" onclick="copyLog()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim)">Copy</button>
           <button class="btn btn-sm" onclick="clearLog()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim)">Clear</button>
@@ -650,6 +747,15 @@
   </div><!-- end mainContent -->
 
 </div><!-- end container -->
+
+<!-- Help overlays -->
+<div class="help-overlay" id="helpOverlay" onclick="closeHelp(event)">
+  <div class="help-card">
+    <button class="help-card-close" onclick="closeHelp()">&times;</button>
+    <div class="help-card-title" id="helpTitle"></div>
+    <div class="help-card-body" id="helpBody"></div>
+  </div>
+</div>
 
 <script>
   // UUIDs hardcoded
@@ -863,6 +969,7 @@
       document.getElementById('connStats').classList.add('visible');
       updateDropDisplay();
       log(`✓ Connected to ${device.name || 'Unknown'}`, 'success');
+      checkDeviceMatch(device);
 
       // Handle disconnect
       device.addEventListener('gattserverdisconnected', onDisconnected);
@@ -889,9 +996,10 @@
     log(`⚠ Disconnected from ${device.name || 'device'}`, 'warn');
     setStatus('Disconnected — attempting reconnect...', 'disconnected');
 
-    // Clear device from list
+    // Clear device from list and warnings
     delete devices[device.id];
     renderDeviceList();
+    document.getElementById('wrongDeviceWarn').classList.remove('visible');
 
     dropCount++;
     document.getElementById('btnSend').disabled = true;
@@ -1035,6 +1143,55 @@
     document.getElementById('btnDisconnect').disabled = true;
     document.getElementById('connStats').classList.remove('visible');
     dropCount = 0;
+  }
+
+  const HELP_CONTENT = {
+    main: {
+      title: 'BLE Diagnostic Tool',
+      body: 'Open source BLE diagnostic tool for pSolBot devices.<br><br>Use this tool to verify Bluetooth connectivity, send commands, and capture event logs to help diagnose issues in the field.<br><br>Share the event log with <strong style="color:var(--accent)">support@solarpivotpower.com</strong> if you need assistance.'
+    },
+    scan: {
+      title: 'Scan & Connect',
+      body: 'Tap <strong style="color:var(--accent)">Scan</strong> to search for nearby Bluetooth devices.<br><br>A browser popup will appear listing available devices — select your <strong style="color:var(--accent2)">pSolBot</strong> device from the list and tap <strong>Pair</strong>.<br><br>The app will connect automatically after pairing.'
+    },
+    send: {
+      title: 'Send Command',
+      body: 'Use the <strong style="color:var(--accent)">Quick Commands</strong> to send preset commands to your connected pSolBot:<br><br>• <strong>Status</strong> — request device status<br>• <strong>SunRise / SolarNoon / SunSet</strong> — send sun position commands<br>• <strong>Track</strong> — send your GPS location and current time<br><br>Or type a custom command and tap <strong>Send</strong>.'
+    },
+    log: {
+      title: 'Event Log',
+      body: 'The event log records all connection events, commands sent, and responses received from your pSolBot.<br><br>Tap <strong style="color:var(--accent)">Copy</strong> to copy the full log to your clipboard, then paste it into an email to <strong style="color:var(--accent2)">support@solarpivotpower.com</strong> for diagnostic assistance.'
+    }
+  };
+
+  function showHelp(key) {
+    const h = HELP_CONTENT[key];
+    if (!h) return;
+    document.getElementById('helpTitle').textContent = h.title;
+    document.getElementById('helpBody').innerHTML = h.body;
+    document.getElementById('helpOverlay').classList.add('visible');
+  }
+
+  function closeHelp(event) {
+    // Close if clicking overlay background or close button (not the card itself)
+    if (!event || event.target === document.getElementById('helpOverlay') || event.target.classList.contains('help-card-close')) {
+      document.getElementById('helpOverlay').classList.remove('visible');
+    }
+  }
+
+  function checkDeviceMatch(device) {
+    // After connecting, verify this is actually a pSolBot by checking the service UUID
+    // We do this by checking if our service was accessible (connection would have failed otherwise)
+    // Show warning only if device name doesn't look like a pSolBot
+    const warn = document.getElementById('wrongDeviceWarn');
+    const name = (device.name || '').toLowerCase();
+    const looksLikePsolBot = name.includes('psolbot') || name.includes('psol') || name.includes('solbot');
+    if (!looksLikePsolBot) {
+      warn.classList.add('visible');
+      log('⚠ Device name does not match pSolBot — verify you connected to the correct device', 'warn');
+    } else {
+      warn.classList.remove('visible');
+    }
   }
 
   // Request GPS permission upfront so it's ready when Track is pressed
