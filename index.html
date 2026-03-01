@@ -1,0 +1,1085 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BLE Diagnostic Tool</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0e17;
+    --surface: #111827;
+    --surface2: #1a2235;
+    --border: #1e3a5f;
+    --accent: #00d4ff;
+    --accent2: #00ff9d;
+    --warn: #ff9500;
+    --danger: #ff3b5c;
+    --text: #e2e8f0;
+    --text-dim: #64748b;
+    --text-mono: #a8d8ea;
+    --glow: 0 0 20px rgba(0, 212, 255, 0.3);
+    --glow2: 0 0 20px rgba(0, 255, 157, 0.3);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 500;
+    min-height: 100vh;
+    padding: 16px;
+    background-image: 
+      radial-gradient(ellipse at 20% 0%, rgba(0, 212, 255, 0.05) 0%, transparent 50%),
+      radial-gradient(ellipse at 80% 100%, rgba(0, 255, 157, 0.04) 0%, transparent 50%);
+  }
+
+  /* Grid scanline effect */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: repeating-linear-gradient(
+      0deg, transparent, transparent 2px,
+      rgba(0, 212, 255, 0.015) 2px, rgba(0, 212, 255, 0.015) 4px
+    );
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .container {
+    max-width: 600px;
+    margin: 0 auto;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* Header */
+  .header {
+    text-align: center;
+    margin-bottom: 24px;
+    padding: 20px 0 16px;
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+
+  .header::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 100px;
+    height: 1px;
+    background: var(--accent);
+    box-shadow: var(--glow);
+  }
+
+  .logo-line {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 4px;
+  }
+
+  .ble-icon {
+    width: 28px;
+    height: 28px;
+    position: relative;
+  }
+
+  .ble-icon svg { width: 100%; height: 100%; }
+
+  h1 {
+    font-size: 26px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: var(--accent);
+    text-shadow: var(--glow);
+  }
+
+  .subtitle {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+
+  /* Status bar */
+  .status-bar {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    flex-shrink: 0;
+    transition: all 0.3s;
+  }
+
+  .status-dot.scanning { background: var(--warn); animation: pulse-warn 1s infinite; }
+  .status-dot.connected { background: var(--accent2); box-shadow: var(--glow2); animation: pulse-green 2s infinite; }
+  .status-dot.disconnected { background: var(--danger); }
+
+  @keyframes pulse-warn {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.8); }
+  }
+  @keyframes pulse-green {
+    0%, 100% { box-shadow: 0 0 6px rgba(0,255,157,0.5); }
+    50% { box-shadow: 0 0 14px rgba(0,255,157,0.9); }
+  }
+
+  .status-text {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    color: var(--text-mono);
+    flex: 1;
+  }
+
+  .rssi-badge {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    display: none;
+  }
+
+  .rssi-badge.visible { display: block; }
+  .rssi-badge.strong { color: var(--accent2); border-color: var(--accent2); }
+  .rssi-badge.medium { color: var(--warn); border-color: var(--warn); }
+  .rssi-badge.weak { color: var(--danger); border-color: var(--danger); }
+
+  /* Cards */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  .card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+  }
+
+  .card-title {
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  .card-title span {
+    color: var(--accent);
+    margin-right: 8px;
+  }
+
+  /* Buttons */
+  .btn {
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    padding: 10px 20px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: white;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+
+  .btn:active::after { opacity: 0.1; }
+
+  .btn-primary {
+    background: linear-gradient(135deg, #0066aa, #0099dd);
+    color: white;
+    box-shadow: 0 0 15px rgba(0, 153, 221, 0.3);
+  }
+
+  .btn-primary:hover { box-shadow: 0 0 25px rgba(0, 153, 221, 0.5); transform: translateY(-1px); }
+
+  .btn-success {
+    background: linear-gradient(135deg, #006644, #00aa66);
+    color: white;
+    box-shadow: 0 0 15px rgba(0, 170, 102, 0.3);
+  }
+
+  .btn-success:hover { box-shadow: 0 0 25px rgba(0, 170, 102, 0.5); transform: translateY(-1px); }
+
+  .btn-danger {
+    background: linear-gradient(135deg, #880022, #cc0033);
+    color: white;
+  }
+
+  .btn-danger:hover { transform: translateY(-1px); }
+
+  .btn-send {
+    background: linear-gradient(135deg, #665500, #cc9900);
+    color: white;
+    box-shadow: 0 0 15px rgba(204, 153, 0, 0.3);
+    padding: 12px 28px;
+    font-size: 15px;
+  }
+
+  .btn-send:hover { box-shadow: 0 0 25px rgba(204, 153, 0, 0.5); transform: translateY(-1px); }
+
+  .btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+  }
+
+  .btn-sm { padding: 6px 14px; font-size: 12px; }
+
+  /* Device list */
+  .device-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 280px;
+    overflow-y: auto;
+  }
+
+  .device-list::-webkit-scrollbar { width: 4px; }
+  .device-list::-webkit-scrollbar-track { background: var(--surface2); }
+  .device-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .device-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .device-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background: var(--accent);
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .device-item:hover { border-color: var(--accent); background: rgba(0, 212, 255, 0.05); }
+  .device-item:hover::before { opacity: 1; }
+  .device-item.selected { border-color: var(--accent2); background: rgba(0, 255, 157, 0.05); }
+  .device-item.selected::before { background: var(--accent2); opacity: 1; }
+
+  .device-signal {
+    display: flex;
+    align-items: flex-end;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  .signal-bar {
+    width: 4px;
+    background: var(--text-dim);
+    border-radius: 1px;
+    transition: background 0.3s;
+  }
+
+  .signal-bar:nth-child(1) { height: 6px; }
+  .signal-bar:nth-child(2) { height: 10px; }
+  .signal-bar:nth-child(3) { height: 14px; }
+  .signal-bar:nth-child(4) { height: 18px; }
+
+  .signal-strong .signal-bar { background: var(--accent2); }
+  .signal-medium .signal-bar:not(:nth-child(4)) { background: var(--warn); }
+  .signal-medium .signal-bar:nth-child(4) { background: var(--text-dim); }
+  .signal-weak .signal-bar:nth-child(1) { background: var(--danger); }
+
+  .device-info { flex: 1; min-width: 0; }
+
+  .device-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .device-address {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 2px;
+  }
+
+  .device-rssi {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    text-align: right;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 32px 16px;
+    color: var(--text-dim);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 1px;
+  }
+
+  .empty-state .icon { font-size: 32px; margin-bottom: 10px; opacity: 0.4; }
+
+  /* Command section */
+  .command-input-wrap {
+    position: relative;
+    margin-bottom: 12px;
+  }
+
+  .command-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+  }
+
+  .command-input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 14px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 14px;
+    color: var(--accent);
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    caret-color: var(--accent);
+  }
+
+  .command-input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(0, 212, 255, 0.1);
+  }
+
+  .command-input::placeholder { color: var(--text-dim); }
+  .command-input:disabled { opacity: 0.4; }
+
+  .byte-counter {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    pointer-events: none;
+  }
+
+  .byte-counter.over { color: var(--warn); }
+
+  .send-row {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+
+  .char-info {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    flex: 1;
+  }
+
+  /* Quick commands */
+  .quick-cmds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .quick-cmd {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    padding: 5px 10px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+
+  .quick-cmd:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* Log */
+  .log-container {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px;
+    height: 180px;
+    overflow-y: auto;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 12px;
+  }
+
+  .log-container::-webkit-scrollbar { width: 4px; }
+  .log-container::-webkit-scrollbar-track { background: transparent; }
+  .log-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+  .log-entry {
+    padding: 3px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.03);
+    display: flex;
+    gap: 10px;
+    line-height: 1.5;
+  }
+
+  .log-time { color: var(--text-dim); flex-shrink: 0; }
+  .log-msg { color: var(--text-mono); word-break: break-all; }
+  .log-entry.success .log-msg { color: var(--accent2); }
+  .log-entry.error .log-msg { color: var(--danger); }
+  .log-entry.warn .log-msg { color: var(--warn); }
+  .log-entry.info .log-msg { color: var(--accent); }
+
+  /* Scan controls */
+  .scan-controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .scan-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--warn);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    display: none;
+    flex-shrink: 0;
+  }
+
+  .scan-spinner.active { display: block; }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Stats row */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+
+  .stat-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+    line-height: 1;
+    margin-bottom: 4px;
+  }
+
+  .stat-label {
+    font-size: 11px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+
+  /* Not supported */
+  .not-supported {
+    background: var(--surface);
+    border: 1px solid var(--danger);
+    border-radius: 10px;
+    padding: 24px;
+    text-align: center;
+    color: var(--danger);
+  }
+
+  .not-supported h2 { margin-bottom: 10px; font-size: 18px; letter-spacing: 2px; }
+  .not-supported p { font-size: 14px; color: var(--text-dim); line-height: 1.6; }
+
+  /* Divider */
+  .divider {
+    height: 1px;
+    background: var(--border);
+    margin: 14px 0;
+  }
+
+  /* Connected device info */
+  .connected-device {
+    background: rgba(0, 255, 157, 0.05);
+    border: 1px solid rgba(0, 255, 157, 0.2);
+    border-radius: 8px;
+    padding: 12px 14px;
+    margin-bottom: 14px;
+    display: none;
+  }
+
+  .connected-device.visible { display: block; }
+
+  .connected-device-name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--accent2);
+    margin-bottom: 4px;
+  }
+
+  .connected-device-addr {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* UUID config */
+  .uuid-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .uuid-field label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    display: block;
+    margin-bottom: 5px;
+  }
+
+  .uuid-field input {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 8px 10px;
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 10px;
+    color: var(--text-mono);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+
+  .uuid-field input:focus { border-color: var(--accent); }
+
+  /* Collapsible */
+  .collapsible-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .collapsible-arrow {
+    font-size: 12px;
+    color: var(--text-dim);
+    transition: transform 0.2s;
+  }
+
+  .collapsible-header.open .collapsible-arrow { transform: rotate(180deg); }
+
+  .collapsible-content {
+    display: none;
+    margin-top: 14px;
+  }
+
+  .collapsible-content.open { display: block; }
+
+  @media (max-width: 400px) {
+    .uuid-grid { grid-template-columns: 1fr; }
+    .stats-row { grid-template-columns: repeat(3, 1fr); }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <div class="logo-line">
+      <svg class="ble-icon" viewBox="0 0 24 24" fill="none">
+        <path d="M12 2L12 22M12 2L17 7L12 12L17 17L12 22M12 2L7 7L12 12L7 17" stroke="#00d4ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="12" cy="12" r="10" stroke="#1e3a5f" stroke-width="1"/>
+      </svg>
+      <h1>BLE Diagnostic</h1>
+    </div>
+    <div class="subtitle">Bluetooth Low Energy Debug Tool</div>
+  </div>
+
+  <div id="notSupported" class="not-supported" style="display:none">
+    <h2>⚠ Not Supported</h2>
+    <p>Web Bluetooth is not available in this browser.<br><br>
+    Please use <strong>Chrome for Android</strong> or Chrome on desktop.<br>
+    Safari and Firefox do not support Web Bluetooth.</p>
+  </div>
+
+  <div id="mainContent">
+
+    <!-- Status Bar -->
+    <div class="status-bar">
+      <div class="status-dot" id="statusDot"></div>
+      <div class="status-text" id="statusText">Ready — tap Scan to discover devices</div>
+      <div class="rssi-badge" id="rssiBadge">-- dBm</div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row">
+      <div class="stat-box">
+        <div class="stat-value" id="statDevices">0</div>
+        <div class="stat-label">Devices</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="statSent">0</div>
+        <div class="stat-label">Sent</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-value" id="statDrops">0</div>
+        <div class="stat-label">Drops</div>
+      </div>
+    </div>
+
+    <!-- Scan Card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>01</span>Scan &amp; Connect</div>
+        <div class="scan-spinner" id="scanSpinner"></div>
+      </div>
+
+      <div class="scan-controls" style="margin-bottom:14px">
+        <button class="btn btn-primary" id="btnScan" onclick="startScan()">⬡ Scan</button>
+        <button class="btn btn-danger btn-sm" id="btnDisconnect" onclick="disconnect()" disabled>Disconnect</button>
+      </div>
+
+      <div class="connected-device" id="connectedDevice">
+        <div class="connected-device-name" id="connectedName">—</div>
+        <div class="connected-device-addr" id="connectedAddr">—</div>
+      </div>
+
+      <div class="device-list" id="deviceList">
+        <div class="empty-state">
+          <div class="icon">📡</div>
+          No devices found yet.<br>Tap Scan to begin.
+        </div>
+      </div>
+    </div>
+
+    <!-- Send Card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>02</span>Send Command</div>
+      </div>
+
+      <!-- UUID Config (collapsible) -->
+      <div class="collapsible-header" id="uuidHeader" onclick="toggleUUID()">
+        <div style="font-size:12px;color:var(--text-dim);font-family:'Share Tech Mono',monospace;letter-spacing:1px">▸ SERVICE / CHARACTERISTIC UUID</div>
+        <div class="collapsible-arrow" id="uuidArrow">▼</div>
+      </div>
+      <div class="collapsible-content" id="uuidContent">
+        <div class="uuid-grid" style="margin-top:12px">
+          <div class="uuid-field">
+            <label>Service UUID</label>
+            <input type="text" id="serviceUUID" value="f5430ca7-9d13-4140-8834-6fa5cfb10f44" placeholder="Service UUID">
+          </div>
+          <div class="uuid-field">
+            <label>Characteristic UUID</label>
+            <input type="text" id="charUUID" value="1e10a180-dba0-4667-850f-08bb444a8256" placeholder="Characteristic UUID">
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- Quick commands -->
+      <div class="command-label">Quick Commands</div>
+      <div class="quick-cmds">
+        <div class="quick-cmd" onclick="setCmd('PING#')">PING#</div>
+        <div class="quick-cmd" onclick="setCmd('STATUS#')">STATUS#</div>
+        <div class="quick-cmd" onclick="setCmd('TEST#')">TEST#</div>
+        <div class="quick-cmd" onclick="setCmd('2|-97.74306|30.26715|TEST|1|#')">Sample CMD</div>
+      </div>
+
+      <!-- Command input -->
+      <div class="command-label">Command</div>
+      <div class="command-input-wrap">
+        <input type="text" class="command-input" id="cmdInput"
+          placeholder="Enter command string..." 
+          oninput="updateByteCount()"
+          onkeydown="if(event.key==='Enter') sendCommand()">
+      </div>
+
+      <div class="send-row">
+        <div class="char-info" id="charInfo">0 bytes</div>
+        <button class="btn btn-send" id="btnSend" onclick="sendCommand()" disabled>▶ Send</button>
+      </div>
+    </div>
+
+    <!-- Log Card -->
+    <div class="card">
+      <div class="card-header">
+        <div class="card-title"><span>03</span>Event Log</div>
+        <button class="btn btn-sm" onclick="clearLog()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim)">Clear</button>
+      </div>
+      <div class="log-container" id="logContainer">
+        <!-- logs appear here -->
+      </div>
+    </div>
+
+  </div><!-- end mainContent -->
+
+</div><!-- end container -->
+
+<script>
+  // State
+  let bleDevice = null;
+  let bleServer = null;
+  let bleCharacteristic = null;
+  let rssiInterval = null;
+  let statSent = 0;
+  let statDrops = 0;
+  let devices = {};
+
+  // Check Web Bluetooth support
+  if (!navigator.bluetooth) {
+    document.getElementById('notSupported').style.display = 'block';
+    document.getElementById('mainContent').style.display = 'none';
+  }
+
+  function log(msg, type = '') {
+    const container = document.getElementById('logContainer');
+    const now = new Date();
+    const time = now.toTimeString().split(' ')[0];
+    const entry = document.createElement('div');
+    entry.className = `log-entry ${type}`;
+    entry.innerHTML = `<span class="log-time">${time}</span><span class="log-msg">${msg}</span>`;
+    container.appendChild(entry);
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function clearLog() {
+    document.getElementById('logContainer').innerHTML = '';
+  }
+
+  function setStatus(msg, state = '') {
+    document.getElementById('statusText').textContent = msg;
+    const dot = document.getElementById('statusDot');
+    dot.className = 'status-dot ' + state;
+  }
+
+  function updateStats() {
+    document.getElementById('statDevices').textContent = Object.keys(devices).length;
+    document.getElementById('statSent').textContent = statSent;
+    document.getElementById('statDrops').textContent = statDrops;
+  }
+
+  function setCmd(cmd) {
+    document.getElementById('cmdInput').value = cmd;
+    updateByteCount();
+  }
+
+  function updateByteCount() {
+    const val = document.getElementById('cmdInput').value;
+    const bytes = new TextEncoder().encode(val).length;
+    const info = document.getElementById('charInfo');
+    info.textContent = `${bytes} bytes`;
+    info.style.color = bytes > 20 ? 'var(--warn)' : 'var(--text-dim)';
+    if (bytes > 20) {
+      info.textContent += ` (>${20}B — uses MTU negotiation)`;
+    }
+  }
+
+  function toggleUUID() {
+    const content = document.getElementById('uuidContent');
+    const header = document.getElementById('uuidHeader');
+    const arrow = document.getElementById('uuidArrow');
+    content.classList.toggle('open');
+    header.classList.toggle('open');
+  }
+
+  function getRSSIClass(rssi) {
+    if (rssi >= -60) return 'strong';
+    if (rssi >= -75) return 'medium';
+    return 'weak';
+  }
+
+  function getSignalClass(rssi) {
+    if (rssi >= -60) return 'signal-strong';
+    if (rssi >= -75) return 'signal-medium';
+    return 'signal-weak';
+  }
+
+  function renderDeviceList() {
+    const list = document.getElementById('deviceList');
+    const devArr = Object.values(devices).sort((a, b) => b.rssi - a.rssi);
+
+    if (devArr.length === 0) {
+      list.innerHTML = `<div class="empty-state"><div class="icon">📡</div>No devices found yet.<br>Tap Scan to begin.</div>`;
+      document.getElementById('statDevices').textContent = '0';
+      return;
+    }
+
+    list.innerHTML = devArr.map(d => `
+      <div class="device-item ${d.selected ? 'selected' : ''}" onclick="selectDevice('${d.id}')">
+        <div class="device-signal ${getSignalClass(d.rssi)}">
+          <div class="signal-bar"></div>
+          <div class="signal-bar"></div>
+          <div class="signal-bar"></div>
+          <div class="signal-bar"></div>
+        </div>
+        <div class="device-info">
+          <div class="device-name">${d.name || 'Unknown Device'}</div>
+          <div class="device-address">${d.id}</div>
+        </div>
+        <div class="device-rssi">
+          <div style="color:${d.rssi >= -60 ? 'var(--accent2)' : d.rssi >= -75 ? 'var(--warn)' : 'var(--danger)'}">${d.rssi} dBm</div>
+          <div style="font-size:10px;margin-top:2px">${d.rssi >= -60 ? 'STRONG' : d.rssi >= -75 ? 'MEDIUM' : 'WEAK'}</div>
+        </div>
+      </div>
+    `).join('');
+
+    document.getElementById('statDevices').textContent = devArr.length;
+  }
+
+  let selectedDeviceId = null;
+
+  function selectDevice(id) {
+    selectedDeviceId = id;
+    Object.keys(devices).forEach(k => devices[k].selected = (k === id));
+    renderDeviceList();
+    log(`Selected: ${devices[id]?.name || id}`, 'info');
+  }
+
+  async function startScan() {
+    try {
+      setStatus('Requesting BLE device...', 'scanning');
+      document.getElementById('scanSpinner').classList.add('active');
+      log('Starting BLE scan...', 'info');
+
+      const serviceUUID = document.getElementById('serviceUUID').value.trim();
+      const options = {
+        acceptAllDevices: true,
+        optionalServices: [serviceUUID]
+      };
+
+      const device = await navigator.bluetooth.requestDevice(options);
+
+      // Web Bluetooth shows browser picker — device is chosen there
+      // We add it to our list
+      const rssi = -65; // Web Bluetooth doesn't expose RSSI at scan time
+      devices[device.id] = {
+        id: device.id,
+        name: device.name || 'Unknown',
+        rssi: rssi,
+        device: device,
+        selected: true
+      };
+
+      selectedDeviceId = device.id;
+      renderDeviceList();
+      log(`Found: ${device.name || 'Unknown'} [${device.id}]`, 'success');
+      setStatus(`Device selected: ${device.name || 'Unknown'}`, '');
+      document.getElementById('scanSpinner').classList.remove('active');
+
+      // Auto connect
+      await connectToDevice(device);
+
+    } catch (err) {
+      document.getElementById('scanSpinner').classList.remove('active');
+      if (err.name === 'NotFoundError' || err.message.includes('cancelled')) {
+        setStatus('Scan cancelled', '');
+        log('Scan cancelled by user', 'warn');
+      } else {
+        setStatus('Scan failed: ' + err.message, '');
+        log(`Scan error: ${err.message}`, 'error');
+      }
+    }
+  }
+
+  async function connectToDevice(device) {
+    try {
+      setStatus(`Connecting to ${device.name || 'device'}...`, 'scanning');
+      log(`Connecting to ${device.name || device.id}...`, 'info');
+
+      const serviceUUID = document.getElementById('serviceUUID').value.trim();
+      const charUUID = document.getElementById('charUUID').value.trim();
+
+      bleDevice = device;
+      bleServer = await device.gatt.connect();
+
+      log('GATT server connected', 'success');
+      log(`Getting service: ${serviceUUID}`, 'info');
+
+      const service = await bleServer.getPrimaryService(serviceUUID);
+      log('Service found ✓', 'success');
+
+      bleCharacteristic = await service.getCharacteristic(charUUID);
+      log('Characteristic found ✓', 'success');
+
+      // Connected!
+      setStatus(`Connected: ${device.name || 'Unknown'}`, 'connected');
+      document.getElementById('connectedDevice').classList.add('visible');
+      document.getElementById('connectedName').textContent = device.name || 'Unknown Device';
+      document.getElementById('connectedAddr').textContent = device.id;
+      document.getElementById('btnSend').disabled = false;
+      document.getElementById('btnDisconnect').disabled = false;
+      document.getElementById('rssiBadge').classList.add('visible');
+
+      log(`✓ Connected to ${device.name || 'Unknown'}`, 'success');
+
+      // Handle disconnect
+      device.addEventListener('gattserverdisconnected', onDisconnected);
+
+      // Start RSSI polling (simulated via reconnect attempts as Web Bluetooth has limited RSSI access)
+      startRSSIMonitor();
+
+    } catch (err) {
+      log(`Connection error: ${err.message}`, 'error');
+      setStatus('Connection failed: ' + err.message, 'disconnected');
+      statDrops++;
+      updateStats();
+    }
+  }
+
+  function onDisconnected(event) {
+    const device = event.target;
+    log(`⚠ Disconnected from ${device.name || 'device'}`, 'warn');
+    setStatus('Disconnected — attempting reconnect...', 'disconnected');
+    statDrops++;
+    updateStats();
+
+    document.getElementById('btnSend').disabled = true;
+    document.getElementById('rssiBadge').classList.remove('visible');
+    stopRSSIMonitor();
+
+    bleCharacteristic = null;
+    bleServer = null;
+
+    // Auto reconnect after 2s
+    setTimeout(() => autoReconnect(device), 2000);
+  }
+
+  async function autoReconnect(device) {
+    if (!device || !device.gatt) return;
+    log('Auto-reconnect attempt...', 'warn');
+    try {
+      await connectToDevice(device);
+    } catch (err) {
+      log(`Reconnect failed: ${err.message}`, 'error');
+      setStatus('Reconnect failed. Try scanning again.', 'disconnected');
+    }
+  }
+
+  function startRSSIMonitor() {
+    // Web Bluetooth doesn't expose live RSSI easily
+    // We show a simulated indicator and note this
+    const badge = document.getElementById('rssiBadge');
+    badge.textContent = 'Connected';
+    badge.className = 'rssi-badge visible strong';
+  }
+
+  function stopRSSIMonitor() {
+    if (rssiInterval) { clearInterval(rssiInterval); rssiInterval = null; }
+  }
+
+  async function sendCommand() {
+    const cmd = document.getElementById('cmdInput').value;
+    if (!cmd) { log('No command entered', 'warn'); return; }
+    if (!bleCharacteristic) { log('Not connected — cannot send', 'error'); return; }
+
+    try {
+      const encoder = new TextEncoder();
+      const data = encoder.encode(cmd);
+      log(`Sending (${data.length} bytes): ${cmd}`, 'info');
+
+      await bleCharacteristic.writeValueWithoutResponse(data);
+
+      statSent++;
+      updateStats();
+      log(`✓ Sent: ${cmd}`, 'success');
+
+    } catch (err) {
+      log(`Send error: ${err.message}`, 'error');
+      statDrops++;
+      updateStats();
+    }
+  }
+
+  async function disconnect() {
+    stopRSSIMonitor();
+    if (bleDevice && bleDevice.gatt.connected) {
+      bleDevice.removeEventListener('gattserverdisconnected', onDisconnected);
+      bleDevice.gatt.disconnect();
+      log('Manually disconnected', 'warn');
+    }
+    bleDevice = null;
+    bleServer = null;
+    bleCharacteristic = null;
+    setStatus('Disconnected', 'disconnected');
+    document.getElementById('btnSend').disabled = true;
+    document.getElementById('btnDisconnect').disabled = true;
+    document.getElementById('connectedDevice').classList.remove('visible');
+    document.getElementById('rssiBadge').classList.remove('visible');
+  }
+
+  // Init
+  updateByteCount();
+  log('BLE Diagnostic Tool ready', 'info');
+  log('Web Bluetooth API: ' + (navigator.bluetooth ? '✓ Supported' : '✗ Not supported'), navigator.bluetooth ? 'success' : 'error');
+</script>
+</body>
+</html>
