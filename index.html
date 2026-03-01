@@ -756,14 +756,14 @@
     return 'signal-weak';
   }
 
-  function updateRSSIBadge(rssi) {
+  function updateRSSIBadge(latency, quality) {
     const badge = document.getElementById('rssiBadge');
-    const cls = getRSSIClass(rssi);
-    badge.textContent = `${rssi} dBm`;
+    const cls = quality === 'STRONG' ? 'strong' : quality === 'MEDIUM' ? 'medium' : 'weak';
+    badge.textContent = `${latency}ms · ${quality}`;
     badge.className = `rssi-badge visible ${cls}`;
-    // Also update device entry RSSI if present
+    const rssiEstimate = quality === 'STRONG' ? -55 : quality === 'MEDIUM' ? -70 : -85;
     if (bleDevice && devices[bleDevice.id]) {
-      devices[bleDevice.id].rssi = rssi;
+      devices[bleDevice.id].rssi = rssiEstimate;
       renderDeviceList();
     }
   }
@@ -774,7 +774,6 @@
 
     if (devArr.length === 0) {
       list.innerHTML = `<div class="empty-state"><div class="icon">📡</div>No devices found yet.<br>Tap Scan to begin.</div>`;
-      document.getElementById('statDevices').textContent = '0';
       return;
     }
 
@@ -791,13 +790,11 @@
           <div class="device-address">${d.id}</div>
         </div>
         <div class="device-rssi">
-          <div style="color:${d.rssi >= -60 ? 'var(--accent2)' : d.rssi >= -75 ? 'var(--warn)' : 'var(--danger)'}">${d.rssi} dBm</div>
-          <div style="font-size:10px;margin-top:2px">${d.rssi >= -60 ? 'STRONG' : d.rssi >= -75 ? 'MEDIUM' : 'WEAK'}</div>
+          <div style="color:${d.rssi >= -60 ? 'var(--accent2)' : d.rssi >= -75 ? 'var(--warn)' : 'var(--danger)'}">${d.rssi !== 0 ? d.rssi + ' dBm' : '...'}</div>
+          <div style="font-size:10px;margin-top:2px">${d.rssi >= -60 ? 'STRONG' : d.rssi >= -75 ? 'MEDIUM' : d.rssi < -75 && d.rssi !== 0 ? 'WEAK' : ''}</div>
         </div>
       </div>
     `).join('');
-
-    document.getElementById('statDevices').textContent = devArr.length;
   }
 
   async function startScan() {
@@ -939,26 +936,34 @@
 
   async function startRSSIMonitor() {
     stopRSSIMonitor();
-    // Poll RSSI every 3 seconds using readRSSI if available
     rssiInterval = setInterval(async () => {
-      if (!bleServer || !bleServer.connected) return;
+      if (!bleDevice) return;
+
+      // Detect abrupt disconnect (e.g. ESP32 reset) via gatt.connected flag
+      if (!bleDevice.gatt.connected) {
+        log('⚠ Connection lost (health check)', 'warn');
+        onDisconnected({ target: bleDevice });
+        return;
+      }
+
+      // Use write latency as signal quality proxy — Web Bluetooth has no RSSI API
       try {
-        // Web Bluetooth exposes RSSI via device.gatt — attempt to read it
-        // Some browsers support this, some don't
-        if (typeof bleDevice.gatt.readRSSI === 'function') {
-          const rssi = await bleDevice.gatt.readRSSI();
-          updateRSSIBadge(rssi);
-          log(`RSSI: ${rssi} dBm`, '');
+        const start = Date.now();
+        await bleCharacteristic.writeValueWithoutResponse(new Uint8Array(0));
+        const latency = Date.now() - start;
+        const quality = latency < 100 ? 'STRONG' : latency < 300 ? 'MEDIUM' : 'WEAK';
+        updateRSSIBadge(latency, quality);
+      } catch(e) {
+        if (!bleDevice.gatt.connected) {
+          log('⚠ Connection lost (write failed)', 'warn');
+          onDisconnected({ target: bleDevice });
         } else {
-          // Fallback: just show connected status without numeric RSSI
           const badge = document.getElementById('rssiBadge');
-          if (badge.textContent === '0 dBm' || badge.textContent === 'Connected') {
-            badge.textContent = 'Connected';
-            badge.className = 'rssi-badge visible strong';
-          }
+          badge.textContent = 'Connected';
+          badge.className = 'rssi-badge visible strong';
         }
-      } catch(e) { /* silently ignore RSSI read errors */ }
-    }, 3000);
+      }
+    }, 4000);
   }
 
   function stopRSSIMonitor() {
