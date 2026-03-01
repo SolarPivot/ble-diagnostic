@@ -508,37 +508,7 @@
 
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  /* Stats row */
-  .stats-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
-    margin-bottom: 16px;
-  }
 
-  .stat-box {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    padding: 12px;
-    text-align: center;
-  }
-
-  .stat-value {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 22px;
-    font-weight: 700;
-    color: var(--accent);
-    line-height: 1;
-    margin-bottom: 4px;
-  }
-
-  .stat-label {
-    font-size: 11px;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    color: var(--text-dim);
-  }
 
   /* Not supported */
   .not-supported {
@@ -585,66 +555,8 @@
     color: var(--text-dim);
   }
 
-  /* UUID config */
-  .uuid-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 14px;
-  }
-
-  .uuid-field label {
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 10px;
-    color: var(--text-dim);
-    letter-spacing: 1px;
-    text-transform: uppercase;
-    display: block;
-    margin-bottom: 5px;
-  }
-
-  .uuid-field input {
-    width: 100%;
-    background: var(--surface2);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    padding: 8px 10px;
-    font-family: 'Share Tech Mono', monospace;
-    font-size: 10px;
-    color: var(--text-mono);
-    outline: none;
-    transition: border-color 0.2s;
-  }
-
-  .uuid-field input:focus { border-color: var(--accent); }
-
-  /* Collapsible */
-  .collapsible-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    cursor: pointer;
-    user-select: none;
-  }
-
-  .collapsible-arrow {
-    font-size: 12px;
-    color: var(--text-dim);
-    transition: transform 0.2s;
-  }
-
-  .collapsible-header.open .collapsible-arrow { transform: rotate(180deg); }
-
-  .collapsible-content {
-    display: none;
-    margin-top: 14px;
-  }
-
-  .collapsible-content.open { display: block; }
-
   @media (max-width: 400px) {
-    .uuid-grid { grid-template-columns: 1fr; }
-    .stats-row { grid-template-columns: repeat(3, 1fr); }
+    .stats-row { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 </head>
@@ -659,7 +571,7 @@
       </svg>
       <h1>BLE Diagnostic</h1>
     </div>
-    <div class="subtitle">Bluetooth Low Energy Debug Tool</div>
+    <div class="subtitle">SolarPivotPower BLE DEBUG TOOL</div>
   </div>
 
   <div id="notSupported" class="not-supported" style="display:none">
@@ -678,21 +590,7 @@
       <div class="rssi-badge" id="rssiBadge">-- dBm</div>
     </div>
 
-    <!-- Stats -->
-    <div class="stats-row">
-      <div class="stat-box">
-        <div class="stat-value" id="statDevices">0</div>
-        <div class="stat-label">Devices</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-value" id="statSent">0</div>
-        <div class="stat-label">Sent</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-value" id="statDrops">0</div>
-        <div class="stat-label">Drops</div>
-      </div>
-    </div>
+
 
     <!-- Scan Card -->
     <div class="card">
@@ -725,26 +623,6 @@
         <div class="card-title"><span>02</span>Send Command</div>
       </div>
 
-      <!-- UUID Config (collapsible) -->
-      <div class="collapsible-header" id="uuidHeader" onclick="toggleUUID()">
-        <div style="font-size:12px;color:var(--text-dim);font-family:'Share Tech Mono',monospace;letter-spacing:1px">▸ SERVICE / CHARACTERISTIC UUID</div>
-        <div class="collapsible-arrow" id="uuidArrow">▼</div>
-      </div>
-      <div class="collapsible-content" id="uuidContent">
-        <div class="uuid-grid" style="margin-top:12px">
-          <div class="uuid-field">
-            <label>Service UUID</label>
-            <input type="text" id="serviceUUID" value="f5430ca7-9d13-4140-8834-6fa5cfb10f44" placeholder="Service UUID">
-          </div>
-          <div class="uuid-field">
-            <label>Characteristic UUID</label>
-            <input type="text" id="charUUID" value="1e10a180-dba0-4667-850f-08bb444a8256" placeholder="Characteristic UUID">
-          </div>
-        </div>
-      </div>
-
-      <div class="divider"></div>
-
       <!-- Quick commands -->
       <div class="command-label">Quick Commands</div>
       <div class="quick-cmds">
@@ -773,7 +651,10 @@
     <div class="card">
       <div class="card-header">
         <div class="card-title"><span>03</span>Event Log</div>
-        <button class="btn btn-sm" onclick="clearLog()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim)">Clear</button>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-sm" onclick="copyLog()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim)">Copy</button>
+          <button class="btn btn-sm" onclick="clearLog()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text-dim)">Clear</button>
+        </div>
       </div>
       <div class="log-container" id="logContainer">
         <!-- logs appear here -->
@@ -785,13 +666,16 @@
 </div><!-- end container -->
 
 <script>
+  // UUIDs hardcoded
+  const SERVICE_UUID = 'f5430ca7-9d13-4140-8834-6fa5cfb10f44';
+  const CHAR_UUID    = '1e10a180-dba0-4667-850f-08bb444a8256';
+
   // State
   let bleDevice = null;
   let bleServer = null;
   let bleCharacteristic = null;
   let rssiInterval = null;
   let statSent = 0;
-  let statDrops = 0;
   let devices = {};
 
   // Check Web Bluetooth support
@@ -815,16 +699,33 @@
     document.getElementById('logContainer').innerHTML = '';
   }
 
+  function copyLog() {
+    const container = document.getElementById('logContainer');
+    const entries = container.querySelectorAll('.log-entry');
+    const lines = Array.from(entries).map(e => {
+      const time = e.querySelector('.log-time')?.textContent || '';
+      const msg  = e.querySelector('.log-msg')?.textContent || '';
+      return `[${time}] ${msg}`;
+    });
+    const text = lines.join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      log('Log copied to clipboard ✓', 'success');
+    }).catch(() => {
+      // Fallback for older browsers
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      log('Log copied to clipboard ✓', 'success');
+    });
+  }
+
   function setStatus(msg, state = '') {
     document.getElementById('statusText').textContent = msg;
     const dot = document.getElementById('statusDot');
     dot.className = 'status-dot ' + state;
-  }
-
-  function updateStats() {
-    document.getElementById('statDevices').textContent = Object.keys(devices).length;
-    document.getElementById('statSent').textContent = statSent;
-    document.getElementById('statDrops').textContent = statDrops;
   }
 
   function setCmd(cmd) {
@@ -839,16 +740,8 @@
     info.textContent = `${bytes} bytes`;
     info.style.color = bytes > 20 ? 'var(--warn)' : 'var(--text-dim)';
     if (bytes > 20) {
-      info.textContent += ` (>${20}B — uses MTU negotiation)`;
+      info.textContent += ` (>20B — uses MTU negotiation)`;
     }
-  }
-
-  function toggleUUID() {
-    const content = document.getElementById('uuidContent');
-    const header = document.getElementById('uuidHeader');
-    const arrow = document.getElementById('uuidArrow');
-    content.classList.toggle('open');
-    header.classList.toggle('open');
   }
 
   function getRSSIClass(rssi) {
@@ -863,6 +756,18 @@
     return 'signal-weak';
   }
 
+  function updateRSSIBadge(rssi) {
+    const badge = document.getElementById('rssiBadge');
+    const cls = getRSSIClass(rssi);
+    badge.textContent = `${rssi} dBm`;
+    badge.className = `rssi-badge visible ${cls}`;
+    // Also update device entry RSSI if present
+    if (bleDevice && devices[bleDevice.id]) {
+      devices[bleDevice.id].rssi = rssi;
+      renderDeviceList();
+    }
+  }
+
   function renderDeviceList() {
     const list = document.getElementById('deviceList');
     const devArr = Object.values(devices).sort((a, b) => b.rssi - a.rssi);
@@ -874,7 +779,7 @@
     }
 
     list.innerHTML = devArr.map(d => `
-      <div class="device-item ${d.selected ? 'selected' : ''}" onclick="selectDevice('${d.id}')">
+      <div class="device-item ${d.selected ? 'selected' : ''}">
         <div class="device-signal ${getSignalClass(d.rssi)}">
           <div class="signal-bar"></div>
           <div class="signal-bar"></div>
@@ -895,41 +800,27 @@
     document.getElementById('statDevices').textContent = devArr.length;
   }
 
-  let selectedDeviceId = null;
-
-  function selectDevice(id) {
-    selectedDeviceId = id;
-    Object.keys(devices).forEach(k => devices[k].selected = (k === id));
-    renderDeviceList();
-    log(`Selected: ${devices[id]?.name || id}`, 'info');
-  }
-
   async function startScan() {
     try {
       setStatus('Requesting BLE device...', 'scanning');
       document.getElementById('scanSpinner').classList.add('active');
       log('Starting BLE scan...', 'info');
 
-      const serviceUUID = document.getElementById('serviceUUID').value.trim();
       const options = {
         acceptAllDevices: true,
-        optionalServices: [serviceUUID]
+        optionalServices: [SERVICE_UUID]
       };
 
       const device = await navigator.bluetooth.requestDevice(options);
 
-      // Web Bluetooth shows browser picker — device is chosen there
-      // We add it to our list
-      const rssi = -65; // Web Bluetooth doesn't expose RSSI at scan time
       devices[device.id] = {
         id: device.id,
         name: device.name || 'Unknown',
-        rssi: rssi,
+        rssi: 0,
         device: device,
         selected: true
       };
 
-      selectedDeviceId = device.id;
       renderDeviceList();
       log(`Found: ${device.name || 'Unknown'} [${device.id}]`, 'success');
       setStatus(`Device selected: ${device.name || 'Unknown'}`, '');
@@ -955,20 +846,24 @@
       setStatus(`Connecting to ${device.name || 'device'}...`, 'scanning');
       log(`Connecting to ${device.name || device.id}...`, 'info');
 
-      const serviceUUID = document.getElementById('serviceUUID').value.trim();
-      const charUUID = document.getElementById('charUUID').value.trim();
-
       bleDevice = device;
       bleServer = await device.gatt.connect();
-
       log('GATT server connected', 'success');
-      log(`Getting service: ${serviceUUID}`, 'info');
 
-      const service = await bleServer.getPrimaryService(serviceUUID);
+      const service = await bleServer.getPrimaryService(SERVICE_UUID);
       log('Service found ✓', 'success');
 
-      bleCharacteristic = await service.getCharacteristic(charUUID);
+      bleCharacteristic = await service.getCharacteristic(CHAR_UUID);
       log('Characteristic found ✓', 'success');
+
+      // Subscribe to notifications if characteristic supports it
+      try {
+        await bleCharacteristic.startNotifications();
+        bleCharacteristic.addEventListener('characteristicvaluechanged', onDataReceived);
+        log('Notifications subscribed ✓ — incoming data will be logged', 'success');
+      } catch (notifyErr) {
+        log(`Notifications not available on this characteristic: ${notifyErr.message}`, 'warn');
+      }
 
       // Connected!
       setStatus(`Connected: ${device.name || 'Unknown'}`, 'connected');
@@ -978,32 +873,39 @@
       document.getElementById('btnSend').disabled = false;
       document.getElementById('btnDisconnect').disabled = false;
       document.getElementById('rssiBadge').classList.add('visible');
-
       log(`✓ Connected to ${device.name || 'Unknown'}`, 'success');
 
       // Handle disconnect
       device.addEventListener('gattserverdisconnected', onDisconnected);
 
-      // Start RSSI polling (simulated via reconnect attempts as Web Bluetooth has limited RSSI access)
+      // Start live RSSI polling every 3 seconds
       startRSSIMonitor();
 
     } catch (err) {
       log(`Connection error: ${err.message}`, 'error');
       setStatus('Connection failed: ' + err.message, 'disconnected');
-      statDrops++;
-      updateStats();
     }
+  }
+
+  function onDataReceived(event) {
+    const value = event.target.value;
+    const decoder = new TextDecoder('utf-8');
+    const text = decoder.decode(value);
+    log(`◀ Received: ${text}`, 'success');
   }
 
   function onDisconnected(event) {
     const device = event.target;
     log(`⚠ Disconnected from ${device.name || 'device'}`, 'warn');
     setStatus('Disconnected — attempting reconnect...', 'disconnected');
-    statDrops++;
-    updateStats();
+
+    // Clear device from list
+    delete devices[device.id];
+    renderDeviceList();
 
     document.getElementById('btnSend').disabled = true;
     document.getElementById('rssiBadge').classList.remove('visible');
+    document.getElementById('connectedDevice').classList.remove('visible');
     stopRSSIMonitor();
 
     bleCharacteristic = null;
@@ -1017,19 +919,46 @@
     if (!device || !device.gatt) return;
     log('Auto-reconnect attempt...', 'warn');
     try {
+      // Re-add to device list for reconnect
+      devices[device.id] = {
+        id: device.id,
+        name: device.name || 'Unknown',
+        rssi: 0,
+        device: device,
+        selected: true
+      };
+      renderDeviceList();
       await connectToDevice(device);
     } catch (err) {
       log(`Reconnect failed: ${err.message}`, 'error');
       setStatus('Reconnect failed. Try scanning again.', 'disconnected');
+      delete devices[device.id];
+      renderDeviceList();
     }
   }
 
-  function startRSSIMonitor() {
-    // Web Bluetooth doesn't expose live RSSI easily
-    // We show a simulated indicator and note this
-    const badge = document.getElementById('rssiBadge');
-    badge.textContent = 'Connected';
-    badge.className = 'rssi-badge visible strong';
+  async function startRSSIMonitor() {
+    stopRSSIMonitor();
+    // Poll RSSI every 3 seconds using readRSSI if available
+    rssiInterval = setInterval(async () => {
+      if (!bleServer || !bleServer.connected) return;
+      try {
+        // Web Bluetooth exposes RSSI via device.gatt — attempt to read it
+        // Some browsers support this, some don't
+        if (typeof bleDevice.gatt.readRSSI === 'function') {
+          const rssi = await bleDevice.gatt.readRSSI();
+          updateRSSIBadge(rssi);
+          log(`RSSI: ${rssi} dBm`, '');
+        } else {
+          // Fallback: just show connected status without numeric RSSI
+          const badge = document.getElementById('rssiBadge');
+          if (badge.textContent === '0 dBm' || badge.textContent === 'Connected') {
+            badge.textContent = 'Connected';
+            badge.className = 'rssi-badge visible strong';
+          }
+        }
+      } catch(e) { /* silently ignore RSSI read errors */ }
+    }, 3000);
   }
 
   function stopRSSIMonitor() {
@@ -1044,27 +973,25 @@
     try {
       const encoder = new TextEncoder();
       const data = encoder.encode(cmd);
-      log(`Sending (${data.length} bytes): ${cmd}`, 'info');
+      log(`▶ Sending (${data.length} bytes): ${cmd}`, 'info');
 
       await bleCharacteristic.writeValueWithoutResponse(data);
 
-      statSent++;
-      updateStats();
-      log(`✓ Sent: ${cmd}`, 'success');
+      log(`✓ Sent OK`, 'success');
 
     } catch (err) {
       log(`Send error: ${err.message}`, 'error');
-      statDrops++;
-      updateStats();
     }
   }
 
   async function disconnect() {
     stopRSSIMonitor();
-    if (bleDevice && bleDevice.gatt.connected) {
+    if (bleDevice) {
       bleDevice.removeEventListener('gattserverdisconnected', onDisconnected);
-      bleDevice.gatt.disconnect();
+      if (bleDevice.gatt.connected) bleDevice.gatt.disconnect();
       log('Manually disconnected', 'warn');
+      delete devices[bleDevice.id];
+      renderDeviceList();
     }
     bleDevice = null;
     bleServer = null;
@@ -1078,7 +1005,7 @@
 
   // Init
   updateByteCount();
-  log('BLE Diagnostic Tool ready', 'info');
+  log('SolarPivotPower BLE Diagnostic ready', 'info');
   log('Web Bluetooth API: ' + (navigator.bluetooth ? '✓ Supported' : '✗ Not supported'), navigator.bluetooth ? 'success' : 'error');
 </script>
 </body>
