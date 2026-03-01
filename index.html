@@ -151,20 +151,21 @@
     flex: 1;
   }
 
-  .rssi-badge {
+  .conn-stats {
     font-family: 'Share Tech Mono', monospace;
-    font-size: 12px;
+    font-size: 11px;
     padding: 3px 8px;
     border-radius: 4px;
     border: 1px solid var(--border);
     color: var(--text-dim);
     display: none;
+    text-align: right;
+    line-height: 1.6;
   }
 
-  .rssi-badge.visible { display: block; }
-  .rssi-badge.strong { color: var(--accent2); border-color: var(--accent2); }
-  .rssi-badge.medium { color: var(--warn); border-color: var(--warn); }
-  .rssi-badge.weak { color: var(--danger); border-color: var(--danger); }
+  .conn-stats.visible { display: block; }
+  .conn-stats .uptime { color: var(--accent2); }
+  .conn-stats .drops { color: var(--warn); }
 
   /* Cards */
   .card {
@@ -587,7 +588,10 @@
     <div class="status-bar">
       <div class="status-dot" id="statusDot"></div>
       <div class="status-text" id="statusText">Ready — tap Scan to discover devices</div>
-      <div class="rssi-badge" id="rssiBadge">-- dBm</div>
+      <div class="conn-stats" id="connStats">
+        <div class="uptime" id="uptimeDisplay">00:00:00</div>
+        <div class="drops" id="dropsDisplay">0 drops</div>
+      </div>
     </div>
 
 
@@ -667,15 +671,19 @@
 
 <script>
   // UUIDs hardcoded
-  const SERVICE_UUID = 'f5430ca7-9d13-4140-8834-6fa5cfb10f44';
-  const CHAR_UUID    = '1e10a180-dba0-4667-850f-08bb444a8256';
+  const SERVICE_UUID      = 'f5430ca7-9d13-4140-8834-6fa5cfb10f44';
+  const CHAR_UUID         = '1e10a180-dba0-4667-850f-08bb444a8256';  // write (input to ESP32)
+  const CHAR_OUTPUT_UUID  = '42ebb4ff-bacf-482b-9eff-f69df2d7409d';  // notify (output from ESP32)
 
   // State
   let bleDevice = null;
   let bleServer = null;
   let bleCharacteristic = null;
+  let bleOutputCharacteristic = null;
   let rssiInterval = null;
-  let statSent = 0;
+  let uptimeInterval = null;
+  let connectedAt = null;
+  let dropCount = 0;
   let devices = {};
 
   // Check Web Bluetooth support
@@ -756,15 +764,28 @@
     return 'signal-weak';
   }
 
-  function updateRSSIBadge(latency, quality) {
-    const badge = document.getElementById('rssiBadge');
-    const cls = quality === 'STRONG' ? 'strong' : quality === 'MEDIUM' ? 'medium' : 'weak';
-    badge.textContent = `${latency}ms · ${quality}`;
-    badge.className = `rssi-badge visible ${cls}`;
-    const rssiEstimate = quality === 'STRONG' ? -55 : quality === 'MEDIUM' ? -70 : -85;
-    if (bleDevice && devices[bleDevice.id]) {
-      devices[bleDevice.id].rssi = rssiEstimate;
-      renderDeviceList();
+  function startUptimeTimer() {
+    connectedAt = Date.now();
+    uptimeInterval = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - connectedAt) / 1000);
+      const h = String(Math.floor(elapsed / 3600)).padStart(2, '0');
+      const m = String(Math.floor((elapsed % 3600) / 60)).padStart(2, '0');
+      const s = String(elapsed % 60).padStart(2, '0');
+      const el = document.getElementById('uptimeDisplay');
+      if (el) el.textContent = `${h}:${m}:${s}`;
+    }, 1000);
+  }
+
+  function stopUptimeTimer() {
+    if (uptimeInterval) { clearInterval(uptimeInterval); uptimeInterval = null; }
+    connectedAt = null;
+  }
+
+  function updateDropDisplay() {
+    const el = document.getElementById('dropsDisplay');
+    if (el) {
+      el.textContent = `${dropCount} drop${dropCount !== 1 ? 's' : ''}`;
+      el.style.color = dropCount > 0 ? 'var(--danger)' : 'var(--text-dim)';
     }
   }
 
@@ -805,7 +826,7 @@
 
       const options = {
         acceptAllDevices: true,
-        optionalServices: [SERVICE_UUID]
+        optionalServices: [SERVICE_UUID, CHAR_OUTPUT_UUID]
       };
 
       const device = await navigator.bluetooth.requestDevice(options);
@@ -851,15 +872,16 @@
       log('Service found ✓', 'success');
 
       bleCharacteristic = await service.getCharacteristic(CHAR_UUID);
-      log('Characteristic found ✓', 'success');
+      log('Write characteristic found ✓', 'success');
 
-      // Subscribe to notifications if characteristic supports it
+      // Subscribe to output characteristic for incoming data from ESP32
       try {
-        await bleCharacteristic.startNotifications();
-        bleCharacteristic.addEventListener('characteristicvaluechanged', onDataReceived);
-        log('Notifications subscribed ✓ — incoming data will be logged', 'success');
+        bleOutputCharacteristic = await service.getCharacteristic(CHAR_OUTPUT_UUID);
+        await bleOutputCharacteristic.startNotifications();
+        bleOutputCharacteristic.addEventListener('characteristicvaluechanged', onDataReceived);
+        log('Output notifications subscribed ✓ — ESP32 replies will be logged', 'success');
       } catch (notifyErr) {
-        log(`Notifications not available on this characteristic: ${notifyErr.message}`, 'warn');
+        log(`Output subscribe failed: ${notifyErr.message}`, 'warn');
       }
 
       // Connected!
@@ -869,14 +891,16 @@
       document.getElementById('connectedAddr').textContent = device.id;
       document.getElementById('btnSend').disabled = false;
       document.getElementById('btnDisconnect').disabled = false;
-      document.getElementById('rssiBadge').classList.add('visible');
+      document.getElementById('connStats').classList.add('visible');
+      updateDropDisplay();
       log(`✓ Connected to ${device.name || 'Unknown'}`, 'success');
 
       // Handle disconnect
       device.addEventListener('gattserverdisconnected', onDisconnected);
 
-      // Start live RSSI polling every 3 seconds
+      // Start health monitor and uptime timer
       startRSSIMonitor();
+      startUptimeTimer();
 
     } catch (err) {
       log(`Connection error: ${err.message}`, 'error');
@@ -900,12 +924,14 @@
     delete devices[device.id];
     renderDeviceList();
 
+    dropCount++;
     document.getElementById('btnSend').disabled = true;
-    document.getElementById('rssiBadge').classList.remove('visible');
+    document.getElementById('connStats').classList.remove('visible');
     document.getElementById('connectedDevice').classList.remove('visible');
     stopRSSIMonitor();
 
     bleCharacteristic = null;
+    bleOutputCharacteristic = null;
     bleServer = null;
 
     // Auto reconnect after 2s
@@ -936,38 +962,19 @@
 
   async function startRSSIMonitor() {
     stopRSSIMonitor();
-    rssiInterval = setInterval(async () => {
+    // Health check every 4s — catches ESP32 resets that don't fire gattserverdisconnected
+    rssiInterval = setInterval(() => {
       if (!bleDevice) return;
-
-      // Detect abrupt disconnect (e.g. ESP32 reset) via gatt.connected flag
       if (!bleDevice.gatt.connected) {
         log('⚠ Connection lost (health check)', 'warn');
         onDisconnected({ target: bleDevice });
-        return;
-      }
-
-      // Use write latency as signal quality proxy — Web Bluetooth has no RSSI API
-      try {
-        const start = Date.now();
-        await bleCharacteristic.writeValueWithoutResponse(new Uint8Array(0));
-        const latency = Date.now() - start;
-        const quality = latency < 100 ? 'STRONG' : latency < 300 ? 'MEDIUM' : 'WEAK';
-        updateRSSIBadge(latency, quality);
-      } catch(e) {
-        if (!bleDevice.gatt.connected) {
-          log('⚠ Connection lost (write failed)', 'warn');
-          onDisconnected({ target: bleDevice });
-        } else {
-          const badge = document.getElementById('rssiBadge');
-          badge.textContent = 'Connected';
-          badge.className = 'rssi-badge visible strong';
-        }
       }
     }, 4000);
   }
 
   function stopRSSIMonitor() {
     if (rssiInterval) { clearInterval(rssiInterval); rssiInterval = null; }
+    stopUptimeTimer();
   }
 
   async function sendCommand() {
@@ -1001,11 +1008,13 @@
     bleDevice = null;
     bleServer = null;
     bleCharacteristic = null;
+    bleOutputCharacteristic = null;
     setStatus('Disconnected', 'disconnected');
     document.getElementById('btnSend').disabled = true;
     document.getElementById('btnDisconnect').disabled = true;
     document.getElementById('connectedDevice').classList.remove('visible');
-    document.getElementById('rssiBadge').classList.remove('visible');
+    document.getElementById('connStats').classList.remove('visible');
+    dropCount = 0;
   }
 
   // Init
