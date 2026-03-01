@@ -548,7 +548,7 @@
       </svg>
       <h1>BLE Diagnostic</h1>
     </div>
-    <div class="subtitle">SolarPivotPower BLE DEBUG TOOL</div>
+    <div class="subtitle">SolarPivotPower BLE DEBUG TOOL &nbsp;·&nbsp; v0.4</div>
   </div>
 
   <div id="notSupported" class="not-supported" style="display:none">
@@ -601,10 +601,11 @@
       <!-- Quick commands -->
       <div class="command-label">Quick Commands</div>
       <div class="quick-cmds">
-        <div class="quick-cmd" onclick="setCmd('PING#')">PING#</div>
-        <div class="quick-cmd" onclick="setCmd('STATUS#')">STATUS#</div>
-        <div class="quick-cmd" onclick="setCmd('TEST#')">TEST#</div>
-        <div class="quick-cmd" onclick="setCmd('2|-97.74306|30.26715|TEST|1|#')">Sample CMD</div>
+        <div class="quick-cmd" onclick="sendQuick('7#')">Status</div>
+        <div class="quick-cmd" onclick="sendQuick('345#')">SunRise</div>
+        <div class="quick-cmd" onclick="sendQuick('390#')">SolarNoon</div>
+        <div class="quick-cmd" onclick="sendQuick('3135#')">SunSet</div>
+        <div class="quick-cmd" onclick="sendTrack()">Track</div>
       </div>
 
       <!-- Command input -->
@@ -925,6 +926,68 @@
     stopUptimeTimer();
   }
 
+  // Send a hardcoded quick command directly without putting it in the input box
+  async function sendQuick(cmd) {
+    if (!bleCharacteristic) { log('Not connected — cannot send', 'error'); return; }
+    try {
+      const data = new TextEncoder().encode(cmd);
+      log(`▶ Sending (${data.length} bytes): ${cmd}`, 'info');
+      await bleCharacteristic.writeValueWithoutResponse(data);
+      log(`✓ Sent OK`, 'success');
+    } catch (err) {
+      log(`Send error: ${err.message}`, 'error');
+    }
+  }
+
+  // Build and send Track command using phone GPS + local datetime
+  async function sendTrack() {
+    if (!bleCharacteristic) { log('Not connected — cannot send', 'error'); return; }
+
+    log('Getting GPS location...', 'info');
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude.toFixed(5);
+        const lon = position.coords.longitude.toFixed(5);
+
+        // Format datetime as MM/DD/YYYY HH:MM:SS, ±HHMM (matching ESP32 expected format)
+        const now = new Date();
+        const mm   = String(now.getMonth() + 1).padStart(2, '0');
+        const dd   = String(now.getDate()).padStart(2, '0');
+        const yyyy = now.getFullYear();
+        const hh   = String(now.getHours()).padStart(2, '0');
+        const min  = String(now.getMinutes()).padStart(2, '0');
+        const ss   = String(now.getSeconds()).padStart(2, '0');
+
+        // UTC offset e.g. -0500
+        const offsetMins = now.getTimezoneOffset(); // minutes behind UTC (positive = behind)
+        const sign = offsetMins <= 0 ? '+' : '-';
+        const absOff = Math.abs(offsetMins);
+        const offHH  = String(Math.floor(absOff / 60)).padStart(2, '0');
+        const offMM  = String(absOff % 60).padStart(2, '0');
+        const utcOffset = `${sign}${offHH}${offMM}`;
+
+        const datetime = `${mm}/${dd}/${yyyy} ${hh}:${min}:${ss}, ${utcOffset}`;
+        const cmd = `2|${lon}|${lat}|${datetime}|1|#`;
+
+        log(`Track command: ${cmd}`, 'info');
+
+        try {
+          const data = new TextEncoder().encode(cmd);
+          log(`▶ Sending (${data.length} bytes)`, 'info');
+          await bleCharacteristic.writeValueWithoutResponse(data);
+          log(`✓ Track sent OK`, 'success');
+        } catch (err) {
+          log(`Send error: ${err.message}`, 'error');
+        }
+      },
+      (err) => {
+        log(`GPS error: ${err.message}`, 'error');
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }
+
   async function sendCommand() {
     const cmd = document.getElementById('cmdInput').value;
     if (!cmd) { log('No command entered', 'warn'); return; }
@@ -964,10 +1027,33 @@
     dropCount = 0;
   }
 
+  // Request GPS permission upfront so it's ready when Track is pressed
+  async function requestPermissionsUpfront() {
+    // Location permission — required for BLE scanning on Android and for Track command
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          log(`GPS ready ✓ (${pos.coords.latitude.toFixed(4)}, ${pos.coords.longitude.toFixed(4)})`, 'success');
+        },
+        (err) => {
+          if (err.code === err.PERMISSION_DENIED) {
+            log('⚠ Location permission denied — Track command will not work', 'warn');
+          } else {
+            log(`GPS: ${err.message}`, 'warn');
+          }
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    } else {
+      log('⚠ Geolocation not supported — Track command unavailable', 'warn');
+    }
+  }
+
   // Init
   updateByteCount();
   log('SolarPivotPower BLE Diagnostic ready', 'info');
   log('Web Bluetooth API: ' + (navigator.bluetooth ? '✓ Supported' : '✗ Not supported'), navigator.bluetooth ? 'success' : 'error');
+  requestPermissionsUpfront();
 </script>
 </body>
 </html>
