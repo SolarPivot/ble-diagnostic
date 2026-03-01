@@ -553,6 +553,74 @@
     .stats-row { grid-template-columns: repeat(2, 1fr); }
   }
 
+  /* Device info panel */
+  .device-info-panel {
+    display: none;
+    margin-top: 14px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+
+  .device-info-panel.visible { display: block; }
+
+  .device-info-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+
+  .info-item { }
+
+  .info-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 3px;
+  }
+
+  .info-value {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 13px;
+    color: var(--accent2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Quick command two-column layout */
+  .quick-cmd-row {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    margin-bottom: 14px;
+  }
+
+  .quick-cmd-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .quick-cmd-col:first-child {
+    flex-shrink: 0;
+  }
+
+  .quick-cmd-col:last-child {
+    flex: 1;
+  }
+
+  .quick-cmd-col:last-child .command-label {
+    text-align: right;
+  }
+
+  .quick-cmd-col:last-child .quick-cmds {
+    justify-content: flex-end;
+  }
+
   /* Help button and popup */
   .help-btn {
     display: inline-flex;
@@ -661,7 +729,7 @@
         </svg>
         <h1>BLE DIAGNOSTIC <button class="help-btn" onclick="showHelp('main')" style="border-color:#1e3a5f;top:0">?</button></h1>
       </div>
-      <div class="subtitle">SolarPivotPower BLE DEBUG TOOL &nbsp;·&nbsp; v0.9</div>
+      <div class="subtitle">SolarPivotPower BLE DEBUG TOOL &nbsp;·&nbsp; v1.0</div>
     </div>
   </div>
 
@@ -707,6 +775,33 @@
           No devices found yet.<br>Tap Scan to begin.
         </div>
       </div>
+
+      <!-- Device info panel — populated after connect via status response -->
+      <div class="device-info-panel" id="deviceInfoPanel">
+        <div class="device-info-grid">
+          <div class="info-item">
+            <div class="info-label">Name</div>
+            <div class="info-value" id="infoName">—</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Serial #</div>
+            <div class="info-value" id="infoSerial">—</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">AutoStart</div>
+            <div class="info-value" id="infoAutoStart">—</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">S/W</div>
+            <div class="info-value" id="infoSW">—</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">H/W</div>
+            <div class="info-value" id="infoHW">—</div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- Send Card -->
@@ -715,14 +810,22 @@
         <div class="card-title"><span>02</span>Send Command<button class="help-btn" onclick="showHelp('send')">?</button></div>
       </div>
 
-      <!-- Quick commands -->
-      <div class="command-label">Quick Commands</div>
-      <div class="quick-cmds">
-        <div class="quick-cmd" onclick="sendQuick('7#')">Status</div>
-        <div class="quick-cmd" onclick="sendQuick('345#')">SunRise</div>
-        <div class="quick-cmd" onclick="sendQuick('390#')">SolarNoon</div>
-        <div class="quick-cmd" onclick="sendQuick('3135#')">SunSet</div>
-        <div class="quick-cmd" onclick="sendTrack()">Track</div>
+      <!-- Quick commands — two column layout -->
+      <div class="quick-cmd-row">
+        <div class="quick-cmd-col">
+          <div class="command-label">Quick Commands</div>
+          <div class="quick-cmds">
+            <div class="quick-cmd" onclick="sendTrack()">Track</div>
+          </div>
+        </div>
+        <div class="quick-cmd-col">
+          <div class="command-label">Manual Control</div>
+          <div class="quick-cmds">
+            <div class="quick-cmd" onclick="sendQuick('345#')">SunRise</div>
+            <div class="quick-cmd" onclick="sendQuick('390#')">SolarNoon</div>
+            <div class="quick-cmd" onclick="sendQuick('3135#')">SunSet</div>
+          </div>
+        </div>
       </div>
 
       <!-- Command input -->
@@ -981,6 +1084,9 @@
       log(`✓ Connected to ${device.name || 'Unknown'}`, 'success');
       checkDeviceMatch(device);
 
+      // Auto-request device status to populate info panel
+      setTimeout(() => sendQuick('7#'), 600);
+
       // Handle disconnect
       device.addEventListener('gattserverdisconnected', onDisconnected);
 
@@ -997,8 +1103,33 @@
   function onDataReceived(event) {
     const value = event.target.value;
     const decoder = new TextDecoder('utf-8');
-    const text = decoder.decode(value);
+    const text = decoder.decode(value).trim();
     log(`◀ Received: ${text}`, 'success');
+    tryParseStatusResponse(text);
+  }
+
+  function tryParseStatusResponse(text) {
+    // Expected format: "pSolBot 1, 00000925, 0, 1.07, 0101"
+    // Fields: Name, Serial#, AutoStart (mins), S/W, H/W
+    const parts = text.split(',').map(p => p.trim());
+    if (parts.length !== 5) return; // not a status response
+
+    const [name, serial, autostart, sw, hw] = parts;
+
+    // Basic sanity check — serial should be numeric-ish, sw should look like a version
+    if (!/^\d+$/.test(serial) || !/[\d.]/.test(sw)) return;
+
+    document.getElementById('infoName').textContent      = name;
+    document.getElementById('infoSerial').textContent    = serial;
+    document.getElementById('infoSW').textContent        = sw;
+    document.getElementById('infoHW').textContent        = hw;
+
+    const autoVal = parseInt(autostart, 10);
+    document.getElementById('infoAutoStart').textContent =
+      autoVal === 0 ? '0 (∞)' : `${autoVal} min`;
+
+    document.getElementById('deviceInfoPanel').classList.add('visible');
+    log(`Device info populated: ${name} | S/N ${serial} | SW ${sw} | HW ${hw} | AutoStart ${autoVal === 0 ? '∞' : autoVal + ' min'}`, 'info');
   }
 
   function onDisconnected(event) {
@@ -1010,6 +1141,11 @@
     delete devices[device.id];
     renderDeviceList();
     document.getElementById('wrongDeviceWarn').classList.remove('visible');
+    document.getElementById('deviceInfoPanel').classList.remove('visible');
+    // Reset info fields
+    ['infoName','infoSerial','infoAutoStart','infoSW','infoHW'].forEach(id => {
+      document.getElementById(id).textContent = '—';
+    });
 
     dropCount++;
     document.getElementById('btnSend').disabled = true;
