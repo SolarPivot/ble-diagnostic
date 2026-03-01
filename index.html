@@ -771,19 +771,9 @@
 
     list.innerHTML = devArr.map(d => `
       <div class="device-item ${d.selected ? 'selected' : ''}">
-        <div class="device-signal ${getSignalClass(d.rssi)}">
-          <div class="signal-bar"></div>
-          <div class="signal-bar"></div>
-          <div class="signal-bar"></div>
-          <div class="signal-bar"></div>
-        </div>
         <div class="device-info">
           <div class="device-name">${d.name || 'Unknown Device'}</div>
           <div class="device-address">${d.id}</div>
-        </div>
-        <div class="device-rssi">
-          <div style="color:${d.rssi >= -60 ? 'var(--accent2)' : d.rssi >= -75 ? 'var(--warn)' : 'var(--danger)'}">${d.rssi !== 0 ? d.rssi + ' dBm' : '...'}</div>
-          <div style="font-size:10px;margin-top:2px">${d.rssi >= -60 ? 'STRONG' : d.rssi >= -75 ? 'MEDIUM' : d.rssi < -75 && d.rssi !== 0 ? 'WEAK' : ''}</div>
         </div>
       </div>
     `).join('');
@@ -797,7 +787,7 @@
 
       const options = {
         acceptAllDevices: true,
-        optionalServices: [SERVICE_UUID]
+        optionalServices: [SERVICE_UUID, CHAR_OUTPUT_UUID]
       };
 
       const device = await navigator.bluetooth.requestDevice(options);
@@ -836,17 +826,11 @@
       log('Write characteristic found ✓', 'success');
 
       // Subscribe to output characteristic for incoming data from ESP32
-      // Must discover all characteristics then find by UUID to avoid GATT errors
       try {
-        const allChars = await service.getCharacteristics();
-        bleOutputCharacteristic = allChars.find(c => c.uuid === CHAR_OUTPUT_UUID) || null;
-        if (bleOutputCharacteristic) {
-          await bleOutputCharacteristic.startNotifications();
-          bleOutputCharacteristic.addEventListener('characteristicvaluechanged', onDataReceived);
-          log('Output notifications subscribed ✓ — ESP32 replies will be logged', 'success');
-        } else {
-          log('Output characteristic not found in service', 'warn');
-        }
+        bleOutputCharacteristic = await service.getCharacteristic(CHAR_OUTPUT_UUID);
+        await bleOutputCharacteristic.startNotifications();
+        bleOutputCharacteristic.addEventListener('characteristicvaluechanged', onDataReceived);
+        log('Output notifications subscribed ✓ — ESP32 replies will be logged', 'success');
       } catch (notifyErr) {
         log(`Output subscribe failed: ${notifyErr.message}`, 'warn');
       }
