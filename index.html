@@ -729,7 +729,7 @@
         </svg>
         <h1>BLE DIAGNOSTIC <button class="help-btn" onclick="showHelp('main')" style="border-color:#1e3a5f;top:0">?</button></h1>
       </div>
-      <div class="subtitle">SolarPivotPower BLE DEBUG TOOL &nbsp;·&nbsp; v1.0</div>
+      <div class="subtitle">SolarPivotPower BLE DEBUG TOOL &nbsp;·&nbsp; v1.1</div>
     </div>
   </div>
 
@@ -1145,15 +1145,7 @@
     // Clear device from list and warnings
     delete devices[device.id];
     renderDeviceList();
-    document.getElementById('wrongDeviceWarn').classList.remove('visible');
-    document.getElementById('deviceInfoPanel').classList.remove('visible');
-    // Reset info fields
-    ['infoName','infoSerial','infoAutoStart','infoSW','infoHW'].forEach(id => {
-      document.getElementById(id).textContent = '—';
-    });
-    // Reset serial under device name
-    const serialEls = document.querySelectorAll('[id^="deviceListSerial_"]');
-    serialEls.forEach(el => el.textContent = 'S/N: —');
+    clearDeviceUI();
 
     dropCount++;
     document.getElementById('btnSend').disabled = true;
@@ -1279,6 +1271,16 @@
     }
   }
 
+  function clearDeviceUI() {
+    document.getElementById('wrongDeviceWarn').classList.remove('visible');
+    document.getElementById('deviceInfoPanel').classList.remove('visible');
+    ['infoName','infoSerial','infoAutoStart','infoSW','infoHW'].forEach(id => {
+      document.getElementById(id).textContent = '—';
+    });
+    const serialEls = document.querySelectorAll('[id^="deviceListSerial_"]');
+    serialEls.forEach(el => el.textContent = 'S/N: —');
+  }
+
   async function disconnect() {
     stopRSSIMonitor();
     if (bleDevice) {
@@ -1297,6 +1299,7 @@
     document.getElementById('btnDisconnect').disabled = true;
     document.getElementById('connStats').classList.remove('visible');
     dropCount = 0;
+    clearDeviceUI();
   }
 
   const HELP_CONTENT = {
