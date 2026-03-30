@@ -1,4 +1,3 @@
-[README.md](https://github.com/user-attachments/files/25670358/README.md)
 # SolarPivotPower BLE Diagnostic Tool
 
 A zero-install browser-based Bluetooth Low Energy (BLE) diagnostic tool for **pSolBot** devices. Built for field support and diagnostics — no app store, no installation, just open a link in Chrome.
@@ -58,6 +57,71 @@ It is intended as a **support and diagnostics companion** to the native pSolBot 
 
 ---
 
+## ESP32 Requirements
+
+For full functionality (including receiving data back from the device), the ESP32 firmware must:
+
+1. **Set MTU before init** — `BLEDevice::setMTU(150)` must be called before `BLEDevice::init()`
+2. **Add CCCD descriptor to the output characteristic** — required for Web Bluetooth notifications:
+
+```cpp
+#include <BLE2902.h>
+
+pOutputChar = pService->createCharacteristic(
+  CHARACTERISTIC_OUTPUT_UUID,
+  BLECharacteristic::PROPERTY_READ | BLECharacteristic::PROPERTY_NOTIFY
+);
+pOutputChar->addDescriptor(new BLE2902());  // required for Web Bluetooth
+```
+
+Without `BLE2902`, Chrome will refuse to subscribe to notifications and incoming data will not be displayed.
+
+---
+
+## BLE UUIDs
+
+```
+Service:            f5430ca7-9d13-4140-8834-6fa5cfb10f44
+Input Characteristic  (write): 1e10a180-dba0-4667-850f-08bb444a8256
+Output Characteristic (notify): 42ebb4ff-bacf-482b-9eff-f69df2d7409d
+```
+
+---
+
+## Command Reference
+
+| Button | Command Sent | Description |
+|---|---|---|
+| Track | `2\|{lon}\|{lat}\|{datetime}\|1\|#` | GPS coordinates + local datetime |
+| SunRise | `345#` | Move to sunrise position |
+| SolarNoon | `390#` | Move to solar noon position |
+| SunSet | `3135#` | Move to sunset position |
+| Status (auto) | `7#` | Query device status — sent automatically on connect |
+
+**Track command format example:**
+```
+2|-97.74306|30.26715|09/27/2023 07:39:37, -0500|1|#
+```
+
+**Status response format:**
+```
+pSolBot 1, 00000925, 0, 1.07, 0101
+         ^name      ^serial  ^autostart(mins)  ^sw  ^hw
+```
+
+---
+
+## Project Structure
+
+```
+ble-diagnostic/
+└── index.html      # Single self-contained file — all HTML, CSS, and JS
+```
+
+All assets (including the SolarPivotPower logo) are embedded as base64 inside `index.html`. No external dependencies, no build step, no framework. The entire tool is one file.
+
+---
+
 ## Deployment
 
 Hosted via GitHub Pages from the `main` branch. Any push to `main` deploys automatically within ~30 seconds.
@@ -70,8 +134,19 @@ To update: edit `index.html`, commit, and push. The live tool updates automatica
 
 | Version | Notes |
 |---|---|
+| v1.3 | Enhanced diagnostic logging — scan tap, cached vs fresh device, GATT state, service discovery timing, Chrome tip on failure |
+| v1.2 | GATT connection guard — prevents "GATT Server disconnected" error on cached devices |
 | v1.1 | Clear device info panel on disconnect; shared clearDeviceUI() |
-| v1.0 | Initial release |
+| v1.0 | Auto device status on connect; device info panel; restructured quick commands |
+| v0.9 | Upfront GPS permission request; Track delimiter fix (`\|1\|#`) |
+| v0.8 | SPP logo transparent background; header layout (logo left, title right) |
+| v0.7 | Help buttons on all sections; wrong device warning |
+| v0.6 | SPP logo added to header |
+| v0.5 | Uptime timer and drop counter replace fake RSSI |
+| v0.4 | Quick commands renamed; Track command with GPS + UTC offset |
+| v0.3 | Output characteristic (notify) for received data; BLE2902 fix documented |
+| v0.2 | GATT notification error suppressed; duplicate device fix |
+| v0.1 | Initial release |
 
 ---
 

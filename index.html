@@ -729,7 +729,7 @@
         </svg>
         <h1>BLE DIAGNOSTIC <button class="help-btn" onclick="showHelp('main')" style="border-color:#1e3a5f;top:0">?</button></h1>
       </div>
-      <div class="subtitle">SolarPivotPower BLE DEBUG TOOL &nbsp;·&nbsp; v1.2</div>
+      <div class="subtitle">SolarPivotPower BLE DEBUG TOOL &nbsp;·&nbsp; v1.3</div>
     </div>
   </div>
 
@@ -1013,16 +1013,19 @@
     try {
       setStatus('Requesting BLE device...', 'scanning');
       document.getElementById('scanSpinner').classList.add('active');
-      log('Starting BLE scan...', 'info');
+      log('Scan button tapped — opening device picker...', 'info');
 
       const options = {
         acceptAllDevices: true,
         optionalServices: [SERVICE_UUID, CHAR_OUTPUT_UUID]
       };
 
+      log('Starting BLE scan...', 'info');
       const device = await navigator.bluetooth.requestDevice(options);
 
-      log(`Found: ${device.name || 'Unknown'} — connecting...`, 'info');
+      // Log whether this is a cached device or freshly scanned
+      const cached = device.gatt.connected;
+      log(`Device selected: "${device.name || 'Unknown'}" — ${cached ? 'previously cached (already connected)' : 'fresh scan'}`, 'info');
       document.getElementById('scanSpinner').classList.remove('active');
 
       // Connect immediately — device added to list only after successful connection
@@ -1032,10 +1035,11 @@
       document.getElementById('scanSpinner').classList.remove('active');
       if (err.name === 'NotFoundError' || err.message.includes('cancelled')) {
         setStatus('Scan cancelled', '');
-        log('Scan cancelled by user', 'warn');
+        log('Scan cancelled by user — no device selected', 'warn');
       } else {
         setStatus('Scan failed: ' + err.message, '');
-        log(`Scan error: ${err.message}`, 'error');
+        log(`Scan error [${err.name}]: ${err.message}`, 'error');
+        log('Tip: try forgetting the device in Chrome Settings → Privacy → Bluetooth devices, then scan again', 'warn');
       }
     }
   }
@@ -1051,24 +1055,29 @@
       // If the browser has a cached device from a prior session it may skip
       // the connection step and go straight to getPrimaryService(), causing
       // "GATT Server is disconnected" errors.
+      log(`GATT state before connect: ${device.gatt.connected ? 'already connected' : 'disconnected'}`, 'info');
       if (!device.gatt.connected) {
+        log('Initiating GATT connection...', 'info');
         bleServer = await device.gatt.connect();
-        log('GATT server connected', 'success');
+        log(`GATT connect() returned — connected: ${bleServer.connected}`, 'success');
       } else {
         bleServer = device.gatt;
-        log('GATT server already connected', 'info');
+        log('Using existing GATT connection (cached device)', 'warn');
       }
 
       // Verify the server is actually connected before proceeding
       if (!bleServer.connected) {
-        throw new Error('GATT Server failed to connect — device may be out of range or powered off');
+        throw new Error('GATT Server failed to connect — device may be out of range, powered off, or in range of another connected client');
       }
 
+      log('Discovering primary service...', 'info');
+      const t0 = Date.now();
       const service = await bleServer.getPrimaryService(SERVICE_UUID);
-      log('Service found ✓', 'success');
+      log(`Service found ✓ (${Date.now() - t0}ms)`, 'success');
 
+      const t1 = Date.now();
       bleCharacteristic = await service.getCharacteristic(CHAR_UUID);
-      log('Write characteristic found ✓', 'success');
+      log(`Write characteristic found ✓ (${Date.now() - t1}ms)`, 'success');
 
       // Subscribe to output characteristic for incoming data from ESP32
       try {
