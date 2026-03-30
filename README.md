@@ -134,6 +134,7 @@ To update: edit `index.html`, commit, and push. The live tool updates automatica
 
 | Version | Notes |
 |---|---|
+| v1.4 | Removed auto-reconnect — pSolBot disables radio after Track command by design; improved disconnect messaging and help text |
 | v1.3 | Enhanced diagnostic logging — scan tap, cached vs fresh device, GATT state, service discovery timing, Chrome tip on failure |
 | v1.2 | GATT connection guard — prevents "GATT Server disconnected" error on cached devices |
 | v1.1 | Clear device info panel on disconnect; shared clearDeviceUI() |

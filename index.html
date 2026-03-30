@@ -729,7 +729,7 @@
         </svg>
         <h1>BLE DIAGNOSTIC <button class="help-btn" onclick="showHelp('main')" style="border-color:#1e3a5f;top:0">?</button></h1>
       </div>
-      <div class="subtitle">SolarPivotPower BLE DEBUG TOOL &nbsp;·&nbsp; v1.3</div>
+      <div class="subtitle">SolarPivotPower BLE DEBUG TOOL &nbsp;·&nbsp; v1.4</div>
     </div>
   </div>
 
@@ -1163,8 +1163,9 @@
 
   function onDisconnected(event) {
     const device = event.target;
-    log(`⚠ Disconnected from ${device.name || 'device'}`, 'warn');
-    setStatus('Disconnected — attempting reconnect...', 'disconnected');
+    log(`⚠ Disconnected from ${device.name || 'device'} — radio off or out of range`, 'warn');
+    log('Device will resume advertising after power cycle or overnight reset', 'info');
+    setStatus('Disconnected', 'disconnected');
 
     // Clear device from list and warnings
     delete devices[device.id];
@@ -1180,22 +1181,11 @@
     bleOutputCharacteristic = null;
     bleServer = null;
 
-    // Auto reconnect after 2s
-    setTimeout(() => autoReconnect(device), 2000);
+    // No auto-reconnect — pSolBot disables radio after receiving Track command
+    // Device will resume advertising after power cycle or next morning reset
+    setStatus('Disconnected — radio off or out of range. Power cycle device to reconnect.', 'disconnected');
   }
 
-  async function autoReconnect(device) {
-    if (!device || !device.gatt) return;
-    log('Auto-reconnect attempt...', 'warn');
-    try {
-      await connectToDevice(device);
-    } catch (err) {
-      log(`Reconnect failed: ${err.message}`, 'error');
-      setStatus('Reconnect failed. Try scanning again.', 'disconnected');
-      delete devices[device.id];
-      renderDeviceList();
-    }
-  }
 
   async function startRSSIMonitor() {
     stopRSSIMonitor();
@@ -1333,7 +1323,7 @@
     },
     scan: {
       title: 'Scan & Connect',
-      body: 'Tap <strong style="color:var(--accent)">Scan</strong> to search for nearby Bluetooth devices.<br><br>A browser popup will appear listing available devices — select your <strong style="color:var(--accent2)">pSolBot</strong> device from the list and tap <strong>Pair</strong>.<br><br>The app will connect automatically after pairing.'
+      body: 'Tap <strong style="color:var(--accent)">Scan</strong> to search for nearby Bluetooth devices.<br><br>A browser popup will appear listing available devices — select your <strong style="color:var(--accent2)">pSolBot</strong> device from the list and tap <strong>Pair</strong>.<br><br>The app will connect automatically after pairing.<br><br><strong style="color:var(--warn)">Note:</strong> After sending a Track command, the pSolBot will disconnect and disable its radio to conserve power while tracking the sun. This is normal — the device will resume advertising after a power cycle or overnight reset.'
     },
     send: {
       title: 'Send Command',
@@ -1399,7 +1389,7 @@
 
   // Init
   updateByteCount();
-  log('SolarPivotPower BLE Diagnostic ready — v1.3', 'info');
+  log('SolarPivotPower BLE Diagnostic ready — v1.4', 'info');
   log('Web Bluetooth API: ' + (navigator.bluetooth ? '✓ Supported' : '✗ Not supported'), navigator.bluetooth ? 'success' : 'error');
   requestPermissionsUpfront();
 </script>
